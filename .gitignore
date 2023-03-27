@@ -1,1 +1,16 @@
 .DS_Store
+data/*
+core/__pycache__
+garbage-collector
+
+# TVOMP Ignores
+# Definitely
+TVOMP/FOMC_transcripts.zip
+
+# Remove as needed
+TVOMP/FOMC_transcripts
+TVOMP/ML
+TVOMP/Main/codes
+TVOMP/Main/data/*.dta
+TVOMP/LICENSE.txt
+TVOMP/README.pdf
