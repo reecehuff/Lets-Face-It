@@ -2,6 +2,7 @@
 data/*
 core/__pycache__
 garbage-collector
+figures
 
 # TVOMP Ignores
 # Definitely
