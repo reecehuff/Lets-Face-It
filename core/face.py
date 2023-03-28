@@ -2,6 +2,7 @@
 from deepface import DeepFace
 import os
 import glob
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -9,16 +10,25 @@ from tqdm import tqdm
 import core.utils as utils
 
 #%% Define a function for predicting the emotions of an individual using DeepFace
-def predict_emotion_from_image(img_path, normalize=True):
-    face_analysis = DeepFace.analyze(img_path = img_path, actions = ['emotion'], silent=True)
+def predict_emotion_from_image(img_path, truth_img_path=None, normalize=True):
+    if truth_img_path is None:
+        face_analysis = DeepFace.analyze(img_path = img_path, actions = ['emotion'], silent=True, enforce_detection=False)
+    else:
+        face_analysis = DeepFace.analyze(img_path = img_path, actions = ['emotion'], silent=True)
     emotion = face_analysis[0]['emotion']
     if normalize:
         total = sum(emotion.values())
         emotion = {k: v / total for k, v in emotion.items()}
     return emotion
 
+#%% Define a function for return NaN emotions when the identity was not verified
+def nan_emotions():
+    return {'angry': np.NaN, 'disgust': np.NaN, 'fear': np.NaN, 'happy': np.NaN, 'sad': np.NaN, 'surprise': np.NaN, 'neutral': np.NaN, 'dominant_emotion': ''}
+
 #%% Define a function for predicting the emotions of an individual using DeepFace
 def verify_identity(truth_img_path, pred_img_path):
+    if truth_img_path is None:
+        return True
     try:
         result = DeepFace.verify(img1_path = truth_img_path, 
                                 img2_path = pred_img_path, 
@@ -30,7 +40,7 @@ def verify_identity(truth_img_path, pred_img_path):
         return False
     
 #%% Define a function for predicting all of the emotions and store them in an excel file 
-def predict_emotions(conference, indentity_img_path, num_frames=None, save_path='data/emotions/'):
+def predict_emotions(conference, indentity_img_path=None, num_frames=None, save_path='data/emotions/'):
 
     # Create a path to save the save data only if that path does not already exist
     if not os.path.exists(save_path):
@@ -51,15 +61,18 @@ def predict_emotions(conference, indentity_img_path, num_frames=None, save_path=
         # Predict the emotions of the individual only if they are the chair (i.e., their identity has been verified)
         if verify:
             # Predict the emotions of the individual
-            emotions = predict_emotion_from_image(frame)
+            emotions = predict_emotion_from_image(frame, indentity_img_path)
             # Add the dominant emotion to the dictionary
             emotions['dominant_emotion'] = max(emotions, key=emotions.get)
-            # Add the timestamp to the emotions dictionary
-            date = os.path.split(os.path.split(frame)[0])[1]
-            time = os.path.basename(frame).replace(".png", "")
-            emotions['timestamp'] = date + " " + time
-            # Append the emotions dictionary to the end of the DataFrame
-            emotions_df = emotions_df.append(emotions, ignore_index = True)
+        else:
+            # Since their identity was not verified, we just return NaN's
+            emotions = nan_emotions()
+        # Add the timestamp to the emotions dictionary
+        date = os.path.split(os.path.split(frame)[0])[1]
+        time = os.path.basename(frame).replace(".png", "")
+        emotions['timestamp'] = date + " " + time
+        # Append the emotions dictionary to the end of the DataFrame
+        emotions_df = emotions_df.append(emotions, ignore_index = True)
     # Set the index of the emotions DataFrame
     emotions_df = emotions_df.set_index('timestamp')
 
@@ -72,11 +85,11 @@ def predict_emotions(conference, indentity_img_path, num_frames=None, save_path=
     return emotions_df
 
 #%% Define a function to loop through the conferences and predict the emotions for all of the frames
-def predict_all_emotions(indentity_frames, conferences, num_frames=None, save_path='data/emotions/'):
+def predict_all_emotions(conferences, indentity_frames=None, num_frames=None, save_path='data/emotions/'):
     # Loop through the conferences
     description = "Predicting emotions for all conferences"
     for conference in tqdm(conferences, desc=description, total=len(conferences)):
         # Get the identity frame path 
-        indentity_frame_path = utils.get_identity_frame_path(indentity_frames, conference)
+        indentity_frame_path = utils.get_identity_frame_path(conference, indentity_frames)
         # Predict the emotions for all of the frames in the video
-        emotions_df = predict_emotions(conference, indentity_frame_path, num_frames=num_frames, save_path=save_path)
+        predict_emotions(conference, indentity_frame_path, num_frames=num_frames, save_path=save_path)
