@@ -13,3 +13,7 @@ pip install -r requirements.txt
 ```
 
 For installing DeepFace on a M1 Mac, follow this [link](https://stackoverflow.com/questions/70981334/how-to-install-deepface-python-face-recognition-package-on-m1-mac)
+
+## Data
+
+- The SPY intraday day was from [link](https://www.kaggle.com/datasets/gratefuldata/intraday-stock-data-1-min-sp-500-200821).
