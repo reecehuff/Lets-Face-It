@@ -11,15 +11,17 @@ plt.rcParams['font.family'] = 'Avenir'
 
 #%% Define a class for plotting useful 
 class Plotter:
-    def __init__(self):
+    def __init__(self, figures_dir="figures"):
         # To initialize the parameters 
-        self.reset_params()
-        # Create the output figures directory
-        # If the figures folder does not exist, create it
-        if not os.path.exists("figures"):
-            os.makedirs("figures")
+        self.reset_params(figures_dir)
+        # Create the output figures_dir directory
+        # If the figures_dir folder does not exist, create it
+        if not os.path.exists(figures_dir):
+            os.makedirs(figures_dir)
 
-    def reset_params(self):
+    def reset_params(self, figures_dir):
+        #---figures_dir
+        self.figures_dir = figures_dir
         #---colors
         self.color1 = '#1F77B4'
         self.color2 = '#FF7F0E'
@@ -129,21 +131,22 @@ class Plotter:
         plt.tight_layout()
 
         # Save figure
-        plt.savefig("figures/" + output_PNG, dpi=800)
+        plt.savefig(os.path.join(self.figures_dir, output_PNG), dpi=800)
 
         # Show plot if show_plots is True
         if self.show_plots:
             plt.show()
 
-    def default_negative_emotions(self, r_or_v, neg_emo, text_loc='upper left'):
+    def default_negative_emotions(self, neg_emo, r_or_v, text_loc='upper left'):
         #---labels
+        self.x_label = r"Negative Emotions$_{%s}$ [-]" % neg_emo
         if r_or_v == 'return':
-            self.x_label = "S&P500 mean return [basis points]"
+            self.y_label = "S&P500 mean return [basis points]"
         elif r_or_v == 'volume':
-            self.x_label = "S&P500 mean volume [-]"
+            self.y_label = "S&P500 mean volume [-]"
         else:
             raise "%s is not a valid input" % r_or_v
-        self.y_label = r"Negative Emotions$_{%s}$ [-]" % neg_emo
+        self.x_label = r"Negative Emotions$_{%s}$ [-]" % neg_emo
 
         # Set the scatter plot color
         if neg_emo == '':
@@ -157,7 +160,11 @@ class Plotter:
         else:
             raise "%s is not a valid input" % neg_emo
         
+        #---text location
         self.text_loc = text_loc
+
+        #---figsize
+        self.fig_size = (5,4)
 
     def negative_emotions(self, df, x_key, y_key, png_fn=None):
         
@@ -181,7 +188,7 @@ class Plotter:
         # Add the p-value in the top left corner
         # Determine the x and y coordinates of the p-value and R^2 value
         p_x, p_y, R_x, R_y = self.set_text_loc(self.text_loc)
-        p_str = '%.5f' % model.pvalues[1]
+        p_str = '%.3f' % model.pvalues[1]
         # print the outputs
         print("corr coeff: ", r)
         print("p value   : ", p_str)
