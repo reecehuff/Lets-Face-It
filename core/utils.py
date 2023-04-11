@@ -8,6 +8,7 @@ import cv2
 from tqdm import tqdm
 from pytube import YouTube 
 from datetime import datetime, timedelta
+import pytz
 
 #--Scripts
 
@@ -47,9 +48,48 @@ def download_yt_vid(yt_id, save_folder="data/mp4s"):
     # Return the fn, the path, the fps, date, and the length
     return fn, path, fps, date, length
 
+def get_yt_upload_time(video_id):
+    api_key = 'AIzaSyCrajdAuLe2HGh6X8ykBmzoGhlSFNc2uEk'
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+    try:
+        youtube = build('youtube', 'v3', developerKey=api_key)
+        request = youtube.videos().list(
+            part='snippet',
+            id=video_id
+        )
+        response = request.execute()
+
+        if 'items' in response and len(response['items']) > 0:
+            video = response['items'][0]
+            upload_timestamp = video['snippet']['publishedAt']
+        else:
+            print(f'Video with ID {video_id} not found.')
+            upload_timestamp = None
+
+    except HttpError as error:
+        print(f'An error occurred: {error}')
+        upload_timestamp = None
+    
+    # Process the upload_timestamp
+    if upload_timestamp is None:
+        assert upload_timestamp is not None, 'Unsuccessfully pulled the timestamp from the YouTube video'
+    else: 
+        # The timestamp returned by the YouTube Data API is in Coordinated Universal Time (UTC). 
+        # The "Z" at the end of the timestamp string ("2021-07-23T18:16:00Z") stands for "Zulu time," which is another way of indicating UTC.
+        utc_timestamp = datetime.fromisoformat(upload_timestamp.replace("Z", "+00:00"))
+        target_timezone = "US/Eastern"  # Replace this with your desired timezone
+        est_timezone = pytz.timezone(target_timezone)
+        est_timestamp = utc_timestamp.astimezone(est_timezone)
+        est_time_str = est_timestamp.strftime('%H:%M:%S')
+        date_time_str = est_timestamp.strftime('%Y-%m-%d')
+        timestamp_time_str = est_timestamp.strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.strptime(timestamp_time_str, '%Y-%m-%d %H:%M:%S')
+        return date_time_str, est_time_str, timestamp
+
 #%% A function for creating time stamps of the video given the start time and the seconds
 def create_timestamps(start_time, seconds):
-    from datetime import datetime, timedelta
+    from datetime import timedelta
     timestamps = []
     for s in seconds:
         dt = start_time + timedelta(seconds=s)
@@ -58,7 +98,7 @@ def create_timestamps(start_time, seconds):
     return timestamps
 
 # A function for converting an mp4 to image frames 
-def mp4_2_frames(video_path, save_freq, fps, start_time):
+def mp4_2_frames(video_path, save_freq, fps, start_time, frame_dir='data/frames/'):
     # Read in the mp4 file using cv2
     video      = cv2.VideoCapture(os.path.join(os.getcwd(), video_path))
     num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -75,7 +115,7 @@ def mp4_2_frames(video_path, save_freq, fps, start_time):
     date = timestamps[0].split(" ")[0]
 
     # If the output save directory does not exist, create it 
-    output_path = 'data/frames/%s' % date
+    output_path = os.path.join(frame_dir, '%s' % date)
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
@@ -111,7 +151,7 @@ def get_identity_frames(conferences, save_path='data/identity_frames.xlsx'):
     true_frames_excel.to_excel(save_path)
 
 #%% Define a function to save the identity frames
-def save_identity_frames(excel_path='data/identity_frames.xlsx', save_path="data/identities"):
+def save_identity_frames(excel_path='data/identity_frames.xlsx', save_path="data/identities_frames/"):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
@@ -205,7 +245,47 @@ def get_intraday_returns_and_volumes(df, date, price='close'):
     return returns_and_volumes
 
 #%% Define a function that calculates the mean anger, disgust, and fear for a particular chairperson over all conferences
-def get_mean_negative_emotions(path2excel, name, emotions_base_dir):
+def get_mean_negative_emotions(emotions_base_dir):
+
+    # Read in the excel file and isolate the dates associated with that particular fedchair
+    excel_paths = sorted(glob.glob(os.path.join(emotions_base_dir, '*')))
+
+    # NOTE: Need to delete this
+    # excel_paths = ['data/emotions/2011-04-27.xlsx', 'data/emotions/2017-09-20.xlsx']
+
+    # Initialize a DataFrame for all of the emotions
+    all_emotions = pd.DataFrame()
+    # Loop through the paths
+    for path in excel_paths:
+        # Verify that the path exists 
+        assert os.path.exists(path), "%s does not exist" % path
+        # Read in the emotions
+        emotions = pd.read_excel(path, index_col=0)
+        # Concatenate the DataFrame's together
+        all_emotions = pd.concat([all_emotions, emotions])
+
+    # Calculate the mean of the anger, disgust, and fear
+    anger_mean   = all_emotions['angry'].mean()
+    disgust_mean = all_emotions['disgust'].mean()
+    fear_mean    = all_emotions['fear'].mean()
+    negative_emotions_mean = anger_mean + disgust_mean + fear_mean
+
+    # Calculate the std of the anger, disgust, and fear
+    negative_emotions_std = all_emotions[['angry', 'disgust', 'fear']].sum(axis=1).std()
+
+    # Calculate the PCA mean
+    from sklearn.decomposition import PCA
+    emotions_np = all_emotions.drop(columns='dominant_emotion').to_numpy()
+    emotions_np = emotions_np[ ~np.isnan(emotions_np[:,0]) , :]
+    pca = PCA(n_components=1)
+    pc1 = pca.fit_transform(emotions_np).flatten()
+    mean_pca = pc1.mean()
+
+    # Return the mean negative emotion and the mean PCA
+    return negative_emotions_mean, negative_emotions_std, mean_pca
+
+#%% Define a function that calculates the mean anger, disgust, and fear for a particular chairperson over all conferences
+def get_mean_negative_emotions_FOMC(path2excel, name, emotions_base_dir):
 
     # Read in the excel file and isolate the dates associated with that particular fedchair
     excel      = pd.read_excel(path2excel, 'QA_identifier')
@@ -268,15 +348,16 @@ def date_2_fedchair(path2excel, date):
     return name
 
 #%% Define a function for calculating the negative emotions variables
-def negative_emotions_df(emotions, returns_and_volumes, date, neg_emotion_normalizers):
+def negative_emotions_df(emotions, returns_and_volumes, date, neg_emotion_normalizers, frame_freq=2, compare_freq=3):
 
     # Initialize the output DataFrame
     output_df = pd.DataFrame()
     # Define the initial start time and desired_length
     start_time = emotions.index[0].split()[1]
-    desired_length = 90
+    current_length = int(compare_freq * (60/frame_freq))
+    desired_length = int(compare_freq * (60/frame_freq))
     # Loop through the DataFrame until the desired length is less than 90
-    while desired_length == 90:
+    while current_length == desired_length:
         # Convert the date to datetime and get previous datetime days
         datetime_start_time = datetime.strptime(start_time, "%H:%M:%S") + timedelta(seconds=2) 
         datetime_next_3_min = datetime_start_time + timedelta(minutes = 2) + timedelta(seconds = 58)
@@ -289,8 +370,8 @@ def negative_emotions_df(emotions, returns_and_volumes, date, neg_emotion_normal
         # Isolate the portion of the DataFrame within these timestamps
         emotions_chunk = emotions[(emotions.index >= start_time_timestamp) & (emotions.index <= next_3_min_timestamp)]
         # Calculate the desired length
-        desired_length = len(emotions_chunk)
-        if desired_length != 90:
+        current_length = len(emotions_chunk)
+        if current_length != desired_length:
             break
         # Isolate the first and third minute timestamps
         first_minute  = emotions_chunk.index[29]
