@@ -54,7 +54,7 @@ def predict_emotions(conference, indentity_img_path=None, num_frames=None, save_
     emotions_df = pd.DataFrame()
     # Loop through the frames
     date = os.path.split(os.path.split(frame_paths[0])[0])[1]
-    description = "Predicting emotions for frames in %s press conference" % date
+    description = "Predicting emotions for frames in %s video" % date
     for frame in tqdm(frame_paths, desc=description, total=len(frame_paths)):
         # Verify the identity of the individual in the frame
         verify = verify_identity(indentity_img_path, frame)
@@ -87,7 +87,7 @@ def predict_emotions(conference, indentity_img_path=None, num_frames=None, save_
 #%% Define a function to loop through the conferences and predict the emotions for all of the frames
 def predict_all_emotions(conferences, indentity_frames=None, num_frames=None, save_path='data/emotions/'):
     # Loop through the conferences
-    description = "Predicting emotions for all conferences"
+    description = "Predicting emotions for all videos"
     for conference in tqdm(conferences, desc=description, total=len(conferences)):
         # Get the identity frame path 
         indentity_frame_path = utils.get_identity_frame_path(conference, indentity_frames)
